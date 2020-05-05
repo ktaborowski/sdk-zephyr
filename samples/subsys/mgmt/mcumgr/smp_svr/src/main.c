@@ -168,6 +168,8 @@ void main(void)
 	smp_bt_register();
 #endif
 
+    printk("== Software version 1 ==");
+
 	/* The system work queue handles all incoming mcumgr requests.  Let the
 	 * main thread idle while the mcumgr server runs.
 	 */
