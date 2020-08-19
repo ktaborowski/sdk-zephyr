@@ -380,7 +380,7 @@ int openthread_start(struct openthread_context *ot_context)
 		 log_strdup(otThreadGetNetworkName(ot_instance)));
 
 	/* Start the network. */
-	error = otThreadSetEnabled(ot_instance, true);
+	error = otThreadSetEnabled(ot_instance, false);
 	if (error != OT_ERROR_NONE) {
 		NET_ERR("Failed to start the OpenThread network [%d]", error);
 	}
