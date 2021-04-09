@@ -15,6 +15,9 @@
 #include <init.h>
 #include <sys/check.h>
 
+#include <logging/log.h>
+LOG_MODULE_REGISTER(slab);
+
 static struct k_spinlock lock;
 
 #ifdef CONFIG_OBJECT_TRACING
@@ -144,6 +147,9 @@ void k_mem_slab_free(struct k_mem_slab *slab, void **mem)
 {
 	k_spinlock_key_t key = k_spin_lock(&lock);
 
+    static volatile uint8_t dbg_cnt;
+    dbg_cnt++;
+
 	if (slab->free_list == NULL) {
 		struct k_thread *pending_thread = z_unpend_first_thread(&slab->wait_q);
 
@@ -154,6 +160,10 @@ void k_mem_slab_free(struct k_mem_slab *slab, void **mem)
 			return;
 		}
 	}
+
+    LOG_INF("%d\tcnt", dbg_cnt);
+    LOG_HEXDUMP_INF(slab, sizeof(struct k_mem_slab), "slab struct");
+
 	**(char ***) mem = slab->free_list;
 	slab->free_list = *(char **) mem;
 	slab->num_used--;
