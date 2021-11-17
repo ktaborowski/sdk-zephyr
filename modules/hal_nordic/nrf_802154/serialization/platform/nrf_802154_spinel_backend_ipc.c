@@ -67,7 +67,7 @@ static int register_endpoint(const struct device *arg)
 SYS_INIT(register_endpoint, POST_KERNEL, CONFIG_RPMSG_SERVICE_EP_REG_PRIORITY);
 
 /* Send packet thread details */
-#define RING_BUFFER_LEN 16
+#define RING_BUFFER_LEN 24
 #define SEND_THREAD_STACK_SIZE 1024
 
 static K_SEM_DEFINE(send_sem, 0, RING_BUFFER_LEN);
