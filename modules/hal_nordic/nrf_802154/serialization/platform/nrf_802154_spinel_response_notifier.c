@@ -40,6 +40,8 @@ static struct spinel_notify_buff_internal notify_buff;
 
 static spinel_prop_key_t awaited_property = AWAITED_PROPERTY_NONE;
 
+static volatile uint32_t notify_sem_take_cnt;
+
 void nrf_802154_spinel_response_notifier_init(void)
 {
 	notify_buff.free = true;
@@ -80,8 +82,8 @@ nrf_802154_spinel_notify_buff_t *nrf_802154_spinel_response_notifier_property_aw
 		k_timeout = K_MSEC(timeout);
 	}
 
-    LOG_WRN("notify sem take");
 	if (k_sem_take(&notify_sem, k_timeout) == 0) {
+        LOG_WRN("nsem T %d", ++notify_sem_take_cnt);
 		result = &notify_buff.buff;
 	} else {
 		LOG_ERR("No response within timeout %u", timeout);
@@ -124,7 +126,7 @@ void nrf_802154_spinel_response_notifier_property_notify(spinel_prop_key_t prope
 		notify_buff.buff.data_len = data_len;
 
 		k_sem_give(&notify_sem);
-        LOG_WRN("notify sem give");
+        LOG_WRN("nsem G %d", notify_sem_take_cnt);
 	} else {
 		/* TODO: Determine if this is an error condition. */
 		NRF_802154_SPINEL_LOG_RAW("Received property that noone is waiting for\n");
