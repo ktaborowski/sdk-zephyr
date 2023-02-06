@@ -27,6 +27,9 @@
 
 #include "cts.h"
 
+static uint8_t bt_conn_cnt = 0;
+static struct bt_conn *bt_conn_p = NULL;
+
 /* Custom Service Variables */
 #define BT_UUID_CUSTOM_SERVICE_VAL \
 	BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x56789abcdef0)
@@ -94,13 +97,13 @@ static void indicate_destroy(struct bt_gatt_indicate_params *params)
 
 #define VND_LONG_MAX_LEN 74
 static uint8_t vnd_long_value[VND_LONG_MAX_LEN + 1] = {
-		  'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '1',
-		  'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '2',
-		  'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '3',
-		  'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '4',
-		  'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '5',
-		  'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '6',
-		  '.', ' ' };
+	'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '1',
+	'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '2',
+	'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '3',
+	'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '4',
+	'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '5',
+	'V', 'e', 'n', 'd', 'o', 'r', ' ', 'd', 'a', 't', 'a', '6',
+	'.', ' ' };
 
 static ssize_t write_long_vnd(struct bt_conn *conn,
 			      const struct bt_gatt_attr *attr, const void *buf,
@@ -187,35 +190,35 @@ static ssize_t write_without_rsp_vnd(struct bt_conn *conn,
 
 /* Vendor Primary Service Declaration */
 BT_GATT_SERVICE_DEFINE(vnd_svc,
-	BT_GATT_PRIMARY_SERVICE(&vnd_uuid),
-	BT_GATT_CHARACTERISTIC(&vnd_enc_uuid.uuid,
-			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE |
-			       BT_GATT_CHRC_INDICATE,
-			       BT_GATT_PERM_READ_ENCRYPT |
-			       BT_GATT_PERM_WRITE_ENCRYPT,
-			       read_vnd, write_vnd, vnd_value),
-	BT_GATT_CCC(vnd_ccc_cfg_changed,
-		    BT_GATT_PERM_READ | BT_GATT_PERM_WRITE_ENCRYPT),
-	BT_GATT_CHARACTERISTIC(&vnd_auth_uuid.uuid,
-			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
-			       BT_GATT_PERM_READ_AUTHEN |
-			       BT_GATT_PERM_WRITE_AUTHEN,
-			       read_vnd, write_vnd, vnd_auth_value),
-	BT_GATT_CHARACTERISTIC(&vnd_long_uuid.uuid, BT_GATT_CHRC_READ |
-			       BT_GATT_CHRC_WRITE | BT_GATT_CHRC_EXT_PROP,
-			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE |
-			       BT_GATT_PERM_PREPARE_WRITE,
-			       read_vnd, write_long_vnd, &vnd_long_value),
-	BT_GATT_CEP(&vnd_long_cep),
-	BT_GATT_CHARACTERISTIC(&vnd_signed_uuid.uuid, BT_GATT_CHRC_READ |
-			       BT_GATT_CHRC_WRITE | BT_GATT_CHRC_AUTH,
-			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
-			       read_signed, write_signed, &signed_value),
-	BT_GATT_CHARACTERISTIC(&vnd_write_cmd_uuid.uuid,
-			       BT_GATT_CHRC_WRITE_WITHOUT_RESP,
-			       BT_GATT_PERM_WRITE, NULL,
-			       write_without_rsp_vnd, &vnd_wwr_value),
-);
+		       BT_GATT_PRIMARY_SERVICE(&vnd_uuid),
+		       BT_GATT_CHARACTERISTIC(&vnd_enc_uuid.uuid,
+					      BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE |
+					      BT_GATT_CHRC_INDICATE,
+					      BT_GATT_PERM_READ_ENCRYPT |
+					      BT_GATT_PERM_WRITE_ENCRYPT,
+					      read_vnd, write_vnd, vnd_value),
+		       BT_GATT_CCC(vnd_ccc_cfg_changed,
+				   BT_GATT_PERM_READ | BT_GATT_PERM_WRITE_ENCRYPT),
+		       BT_GATT_CHARACTERISTIC(&vnd_auth_uuid.uuid,
+					      BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+					      BT_GATT_PERM_READ_AUTHEN |
+					      BT_GATT_PERM_WRITE_AUTHEN,
+					      read_vnd, write_vnd, vnd_auth_value),
+		       BT_GATT_CHARACTERISTIC(&vnd_long_uuid.uuid, BT_GATT_CHRC_READ |
+					      BT_GATT_CHRC_WRITE | BT_GATT_CHRC_EXT_PROP,
+					      BT_GATT_PERM_READ | BT_GATT_PERM_WRITE |
+					      BT_GATT_PERM_PREPARE_WRITE,
+					      read_vnd, write_long_vnd, &vnd_long_value),
+		       BT_GATT_CEP(&vnd_long_cep),
+		       BT_GATT_CHARACTERISTIC(&vnd_signed_uuid.uuid, BT_GATT_CHRC_READ |
+					      BT_GATT_CHRC_WRITE | BT_GATT_CHRC_AUTH,
+					      BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+					      read_signed, write_signed, &signed_value),
+		       BT_GATT_CHARACTERISTIC(&vnd_write_cmd_uuid.uuid,
+					      BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+					      BT_GATT_PERM_WRITE, NULL,
+					      write_without_rsp_vnd, &vnd_wwr_value),
+		       );
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -241,12 +244,17 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		printk("Connection failed (err 0x%02x)\n", err);
 	} else {
 		printk("Connected\n");
+		bt_conn_cnt = 1;
+		bt_conn_p = bt_conn_ref(conn);
 	}
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	printk("Disconnected (reason 0x%02x)\n", reason);
+	bt_conn_cnt = 0;
+	bt_conn_unref(bt_conn_p);
+	bt_conn_p = NULL;
 }
 
 static void alert_stop(void)
@@ -374,9 +382,6 @@ void main(void)
 	while (1) {
 		k_sleep(K_SECONDS(1));
 
-		/* Current Time Service updates only when time is changed */
-		cts_notify();
-
 		/* Heartrate measurements simulation */
 		hrs_notify();
 
@@ -397,6 +402,24 @@ void main(void)
 
 			if (bt_gatt_indicate(NULL, &ind_params) == 0) {
 				indicating = 1U;
+			}
+		}
+
+		if (bt_conn_cnt) {
+			bt_conn_cnt++;
+			printk("Connection countdown %d\n", (11 - bt_conn_cnt));
+
+			int err = cts_notify(bt_conn_p);
+			if (err) {
+				printk("Notify fail (err=%d)\n", err);
+			}
+
+			if (bt_conn_cnt > 10) {
+				err = bt_disable();
+				if (err) {
+					printk("Disable fail (err=%d)\n", err);
+				}
+				break;
 			}
 		}
 	}
