@@ -98,12 +98,8 @@ void cts_init(void)
 	generate_current_time(ct);
 }
 
-void cts_notify(void)
-{	/* Current Time Service updates only when time is changed */
-	if (!ct_update) {
-		return;
-	}
-
-	ct_update = 0U;
-	bt_gatt_notify(NULL, &cts_cvs.attrs[1], &ct, sizeof(ct));
+int cts_notify(struct bt_conn *conn)
+{
+	ct[6]++; /* update seconds */
+	return bt_gatt_notify(conn, &cts_cvs.attrs[1], &ct, sizeof(ct));
 }

@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 void cts_init(void);
-void cts_notify(void);
+int cts_notify(struct bt_conn *conn);
 
 #ifdef __cplusplus
 }
