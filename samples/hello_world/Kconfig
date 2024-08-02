@@ -1,0 +1,5 @@
+config CUSTOM_PATH
+	string "variable with custom path"
+	default "/home/user/custom"
+
+source "Kconfig.zephyr"
