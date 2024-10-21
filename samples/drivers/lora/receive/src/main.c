@@ -47,14 +47,16 @@ int main(void)
 	int16_t rssi;
 	int8_t snr;
 
+	LOG_INF("Build for %s", CONFIG_BOARD_TARGET);
+
 	if (!device_is_ready(lora_dev)) {
 		LOG_ERR("%s Device not ready", lora_dev->name);
 		return 0;
 	}
 
-	config.frequency = 865100000;
-	config.bandwidth = BW_125_KHZ;
-	config.datarate = SF_10;
+	config.frequency = 923300000;
+	config.bandwidth = BW_500_KHZ;
+	config.datarate = SF_11;
 	config.preamble_len = 8;
 	config.coding_rate = CR_4_5;
 	config.iq_inverted = false;

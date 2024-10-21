@@ -59,6 +59,7 @@ enum lora_coding_rate {
 	CR_4_6 = 2,
 	CR_4_7 = 3,
 	CR_4_8 = 4,
+	CR_4_5_LI = 5,
 };
 
 /**

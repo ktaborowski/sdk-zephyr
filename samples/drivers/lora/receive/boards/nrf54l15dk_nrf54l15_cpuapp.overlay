@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2024 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/ {
+	aliases {
+		lora0 = &lora_semtech_sx1262mb2das;
+	};
+};
+
+&spi21 {
+	status = "okay";
+
+	cs-gpios = <&gpio2 0xa GPIO_ACTIVE_LOW>;
+	pinctrl-0 = <&spi21_default>;
+	pinctrl-1 = <&spi21_sleep>;
+	pinctrl-names = "default", "sleep";
+	clock-frequency = <DT_FREQ_M(4)>;
+
+	lora_semtech_sx1262mb2das: sx1262@0 {
+		compatible = "semtech,sx1262";
+		reg = <0>;
+		spi-max-frequency = <8000000>;
+		label = "SX1262";
+		reset-gpios = <&gpio0 0x2 GPIO_ACTIVE_LOW>;
+		busy-gpios = <&gpio0 0x0 GPIO_ACTIVE_HIGH>;
+		antenna-enable-gpios = <&gpio0 0x1 GPIO_ACTIVE_HIGH>;
+		dio1-gpios = <&gpio0 0x3 GPIO_ACTIVE_HIGH>;
+		dio2-tx-enable;
+		tcxo-power-startup-delay-ms = <5>;
+	};
+};
+
+&pinctrl {
+	spi21_default: spi21_default {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK, 2, 6)>,
+			        <NRF_PSEL(SPIM_MISO, 1, 11)>,
+			        <NRF_PSEL(SPIM_MOSI, 2, 8)>;
+		};
+	};
+
+	spi21_sleep: spi21_sleep {
+		group1 {
+			psels = <NRF_PSEL(SPIM_SCK, 2, 6)>,
+			        <NRF_PSEL(SPIM_MISO, 1, 11)>,
+			        <NRF_PSEL(SPIM_MOSI, 2, 8)>;
+			low-power-enable;
+		};
+	};
+};
+
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+&gpio2 {
+	status = "okay";
+};
+
+&mx25r64 {
+	status = "disabled";
+};
+
+// TODO: re-enable HWFC once it's fixed
+&uart20 {
+	/delete-property/ hw-flow-control;
+};
