@@ -27,6 +27,58 @@
 
 #define NON_WAKEUP_RESET_REASON (RESET_PIN | RESET_SOFTWARE | RESET_POR | RESET_DEBUG)
 
+void debug_print(void)
+{
+	// Show the contents of the RESETREAS register (reset reason flags, cumulative unless cleared by firmware)
+	printk("RESETREAS: 0x%08x\n", NRF_POWER->RESETREAS);
+
+	// Show GPIO P0 and P1 LATCH registers (flags for detected pin events not yet acknowledged)
+	printk("GPIO P0 LATCH: 0x%08x\n", NRF_P0->LATCH);
+	printk("GPIO P1 LATCH: 0x%08x\n", NRF_P1->LATCH);
+
+	// Show DETECTMODE registers (edge vs level sense configuration for GPIO group P0 and P1)
+	printk("P0 DETECTMODE: 0x%08x\n", NRF_P0->DETECTMODE);
+	printk("P1 DETECTMODE: 0x%08x\n", NRF_P1->DETECTMODE);
+
+	// Show PIN_CNF register for button 1 (pin configuration, including SENSE field for wakeup)
+	uint8_t btn1_pin = 11; // nrf52840dk button 1 is P0.11
+	printk("Button1 PIN_CNF: 0x%08x\n", NRF_P0->PIN_CNF[btn1_pin]);
+	// SENSE field is bits [17:16]: 0=Disabled, 2=High, 3=Low
+
+	// Show current state of inputs on port P0 (used to see status of detected pins)
+	printk("P0 IN: 0x%08x\n", NRF_P0->IN);
+
+	// Clear LATCH registers on both ports before entering System OFF (removes stale detect events)
+	NRF_P0->LATCH = 0xFFFFFFFF;
+	NRF_P1->LATCH = 0xFFFFFFFF;
+	printk("LATCH cleared. P0: 0x%08x P1: 0x%08x\n", NRF_P0->LATCH, NRF_P1->LATCH);
+
+	// Show radio power control register (0x40001FFC) directly to check if radio is powered
+	printk("RADIO.POWER: 0x%08x\n", *(volatile uint32_t *)0x40001FFC);
+
+	// Show radio state register (current state of radio peripheral)
+	printk("RADIO.STATE: 0x%08x\n", NRF_RADIO->STATE);
+
+	// Show enabled PPI channels (Programmable Peripheral Interconnect, used by BLE and peripherals)
+	printk("PPI.CHEN: 0x%08x\n", NRF_PPI->CHEN);
+	printk("PPI.CHENSET: 0x%08x\n", NRF_PPI->CHENSET);
+	printk("PPI.CH[16].EEP: 0x%08x\n", NRF_PPI->CH[16].EEP);
+	printk("PPI.CH[16].TEP: 0x%08x\n", NRF_PPI->CH[16].TEP);
+	printk("PPI.FORK[16].TEP: 0x%08x\n", NRF_PPI->FORK[16].TEP);
+
+	// Show EasyDMA peripheral modes (to check for activity on system timers)
+	printk("TIMER0.MODE: 0x%08x\n", NRF_TIMER0->MODE);
+	printk("TIMER1.MODE: 0x%08x\n", NRF_TIMER1->MODE);
+	printk("TIMER2.MODE: 0x%08x\n", NRF_TIMER2->MODE);
+
+	// Show high frequency (HFCLK) and low frequency (LFCLK) clock status registers
+	printk("CLOCK.HFCLKSTAT: 0x%08x\n", NRF_CLOCK->HFCLKSTAT);
+	printk("CLOCK.LFCLKSTAT: 0x%08x\n", NRF_CLOCK->LFCLKSTAT);
+
+	// Show enabled RTC0 events (real-time counter)
+	printk("RTC0.EVTEN:  0x%08x\n", NRF_RTC0->EVTEN);
+}
+
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
 #include <zephyr/drivers/timer/nrf_grtc_timer.h>
 #define DEEP_SLEEP_TIME_S 2
@@ -64,6 +116,9 @@ static void power_off_work_handler(struct k_work *work)
 	comparator_set_trigger(comp_dev, COMPARATOR_TRIGGER_BOTH_EDGES);
 	comparator_trigger_is_pending(comp_dev);
 #endif
+
+	debug_print();
+
 	rc = pm_device_action_run(cons_dev, PM_DEVICE_ACTION_SUSPEND);
 	if (rc < 0) {
 		printf("Could not suspend console (%d)\n", rc);
