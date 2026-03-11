@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/comparator.h>
@@ -32,6 +33,80 @@
 #endif
 #if defined(CONFIG_GPIO_WAKEUP_ENABLE)
 static const struct gpio_dt_spec sw0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
+#endif
+#if DT_NODE_EXISTS(DT_ALIAS(sw2))
+static const struct gpio_dt_spec sw2 = GPIO_DT_SPEC_GET(DT_ALIAS(sw2), gpios);
+#endif
+#if DT_NODE_EXISTS(DT_ALIAS(sw3))
+static const struct gpio_dt_spec sw3 = GPIO_DT_SPEC_GET(DT_ALIAS(sw3), gpios);
+#endif
+
+/* Console device for power-off (used from work handler) */
+static const struct device *cons_dev;
+
+static int bluetooth_activity(void);
+
+#if DT_NODE_EXISTS(DT_ALIAS(sw3))
+static void power_off_work_handler(struct k_work *work)
+{
+	int rc;
+
+	ARG_UNUSED(work);
+#if defined(CONFIG_GRTC_WAKEUP_ENABLE)
+	int err = z_nrf_grtc_wakeup_prepare(DEEP_SLEEP_TIME_S * USEC_PER_SEC);
+
+	if (err < 0) {
+		printk("Unable to prepare GRTC as wake up source (err = %d).\n", err);
+		return;
+	}
+#endif
+#if defined(CONFIG_LPCOMP_WAKEUP_ENABLE)
+	comparator_set_trigger(comp_dev, COMPARATOR_TRIGGER_BOTH_EDGES);
+	comparator_trigger_is_pending(comp_dev);
+#endif
+	rc = pm_device_action_run(cons_dev, PM_DEVICE_ACTION_SUSPEND);
+	if (rc < 0) {
+		printf("Could not suspend console (%d)\n", rc);
+		return;
+	}
+	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
+		retained.off_count += 1;
+		retained_update();
+	}
+	hwinfo_clear_reset_cause();
+#if defined(CONFIG_SYS_CLOCK_DISABLE)
+	sys_clock_disable();
+#endif
+	sys_poweroff();
+}
+K_WORK_DEFINE(power_off_work, power_off_work_handler);
+static struct gpio_callback sw3_cb_data;
+static void sw3_callback(const struct device *port, struct gpio_callback *cb, uint32_t pins)
+{
+	ARG_UNUSED(port);
+	ARG_UNUSED(cb);
+	ARG_UNUSED(pins);
+	printk("Power off\n");
+	k_work_submit(&power_off_work);
+}
+#endif
+
+#if DT_NODE_EXISTS(DT_ALIAS(sw2))
+static void bluetooth_activity_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+	printk("Bluetooth activity\n");
+	(void)bluetooth_activity();
+}
+K_WORK_DEFINE(bluetooth_activity_work, bluetooth_activity_work_handler);
+static struct gpio_callback sw2_cb_data;
+static void sw2_callback(const struct device *port, struct gpio_callback *cb, uint32_t pins)
+{
+	ARG_UNUSED(port);
+	ARG_UNUSED(cb);
+	ARG_UNUSED(pins);
+	k_work_submit(&bluetooth_activity_work);
+}
 #endif
 #if defined(CONFIG_LPCOMP_WAKEUP_ENABLE)
 static const struct device *comp_dev = DEVICE_DT_GET(DT_NODELABEL(comp));
@@ -120,6 +195,8 @@ static int bluetooth_activity(void)
 	printk("Bluetooth disabled\n");
 
 	k_sleep(K_MSEC(500));
+
+	return 0;
 }
 
 int main(void)
@@ -127,6 +204,8 @@ int main(void)
 	int rc;
 	uint32_t reset_cause;
 	const struct device *const cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
+
+	cons_dev = cons;
 
 	if (!device_is_ready(cons)) {
 		printf("%s: device not ready.\n", cons->name);
@@ -164,64 +243,54 @@ int main(void)
 		printf("Retained data not supported\n");
 	}
 
-	rc = bluetooth_activity();
-	if (rc < 0) {
-		printf("Bluetooth failed (%d)\n", rc);
-		return 0;
-	}
-
-#if defined(CONFIG_SYS_CLOCK_DISABLE)
-	printf("System clock will be disabled\n");
-#endif
-#if defined(CONFIG_GRTC_WAKEUP_ENABLE)
-	int err = z_nrf_grtc_wakeup_prepare(DEEP_SLEEP_TIME_S * USEC_PER_SEC);
-
-	if (err < 0) {
-		printk("Unable to prepare GRTC as a wake up source (err = %d).\n", err);
-		return 0;
-	} else {
-		printk("Entering system off; wait %u seconds to restart\n", DEEP_SLEEP_TIME_S);
-	}
-#endif
 #if defined(CONFIG_GPIO_WAKEUP_ENABLE)
-	/* configure sw0 as input, interrupt as level active to allow wake-up */
+	/* Button 0 (sw0): configure as wake-up source for when we enter system off */
 	rc = gpio_pin_configure_dt(&sw0, GPIO_INPUT);
 	if (rc < 0) {
 		printf("Could not configure sw0 GPIO (%d)\n", rc);
 		return 0;
 	}
-
 	rc = gpio_pin_interrupt_configure_dt(&sw0, GPIO_INT_LEVEL_ACTIVE);
 	if (rc < 0) {
 		printf("Could not configure sw0 GPIO interrupt (%d)\n", rc);
 		return 0;
 	}
-
-	printf("Entering system off; press sw0 to restart\n");
-#endif
-#if defined(CONFIG_LPCOMP_WAKEUP_ENABLE)
-	comparator_set_trigger(comp_dev, COMPARATOR_TRIGGER_BOTH_EDGES);
-	comparator_trigger_is_pending(comp_dev);
-	printf("Entering system off; change signal level at comparator input to restart\n");
+	printf("Press sw0 to wake from system off\n");
 #endif
 
-	rc = pm_device_action_run(cons, PM_DEVICE_ACTION_SUSPEND);
+#if DT_NODE_EXISTS(DT_ALIAS(sw2))
+	rc = gpio_pin_configure_dt(&sw2, GPIO_INPUT);
+	if (rc >= 0) {
+		gpio_init_callback(&sw2_cb_data, sw2_callback, BIT(sw2.pin));
+		rc = gpio_add_callback(sw2.port, &sw2_cb_data);
+	}
+	if (rc >= 0) {
+		rc = gpio_pin_interrupt_configure_dt(&sw2, GPIO_INT_EDGE_FALLING);
+	}
 	if (rc < 0) {
-		printf("Could not suspend console (%d)\n", rc);
-		return 0;
+		printf("Could not configure sw2 (button 2) (%d)\n", rc);
+	} else {
+		printf("Button 2 (sw2): Bluetooth activity\n");
 	}
-
-	if (IS_ENABLED(CONFIG_APP_USE_RETAINED_MEM)) {
-		/* Update the retained state */
-		retained.off_count += 1;
-		retained_update();
-	}
-
-	hwinfo_clear_reset_cause();
-#if defined(CONFIG_SYS_CLOCK_DISABLE)
-	sys_clock_disable();
 #endif
-	sys_poweroff();
+#if DT_NODE_EXISTS(DT_ALIAS(sw3))
+	rc = gpio_pin_configure_dt(&sw3, GPIO_INPUT);
+	if (rc >= 0) {
+		gpio_init_callback(&sw3_cb_data, sw3_callback, BIT(sw3.pin));
+		rc = gpio_add_callback(sw3.port, &sw3_cb_data);
+	}
+	if (rc >= 0) {
+		rc = gpio_pin_interrupt_configure_dt(&sw3, GPIO_INT_EDGE_FALLING);
+	}
+	if (rc < 0) {
+		printf("Could not configure sw3 (button 3) (%d)\n", rc);
+	} else {
+		printf("Button 3 (sw3): Power off\n");
+	}
+#endif
 
+	for (;;) {
+		k_sleep(K_FOREVER);
+	}
 	return 0;
 }
