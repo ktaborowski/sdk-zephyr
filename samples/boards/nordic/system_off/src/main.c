@@ -159,6 +159,49 @@ static void power_off_work_handler(struct k_work *work)
 #if defined(CONFIG_SYS_CLOCK_DISABLE)
 	sys_clock_disable();
 #endif
+#if defined(CONFIG_SOC_SERIES_NRF52) && defined(CONFIG_BT)
+	/* Clean up BLE/MPSL peripheral state before System OFF to avoid GPIO DETECT
+	 * wakeup failure when debugger keeps the device in emulated System OFF.
+	 */
+	NRF_RADIO->POWER = 0;
+	NRF_RADIO->POWER = 1;
+	NRF_TIMER0->TASKS_STOP = 1;
+	NRF_TIMER1->TASKS_STOP = 1;
+	NRF_TIMER2->TASKS_STOP = 1;
+	NRF_RTC0->TASKS_STOP = 1;
+	NRF_PPI->CHENCLR = 0xFFFFFFFFU;
+	NRF_CLOCK->TASKS_HFCLKSTOP = 1;
+	NRF_RNG->TASKS_STOP = 1;
+	NRF_RNG->INTENCLR = 0xFFFFFFFFU;
+	NRF_GPIOTE->INTENCLR = 0xFFFFFFFFU;
+	for (int i = 0; i < 8; i++) {
+		NRF_GPIOTE->CONFIG[i] = 0;
+	}
+	k_busy_wait(100);
+#endif
+#if defined(CONFIG_GPIO_WAKEUP_ENABLE) && defined(CONFIG_SOC_SERIES_NRF52)
+	/* Re-apply wakeup pin and clear SENSE on all other pins so only sw0 can trigger
+	 * DETECT. After BLE, something may have changed PIN_CNF or left another pin
+	 * with SENSE enabled (holding DETECT or blocking wake). nRF52: only pins with
+	 * SENSE enabled contribute to DETECT; ensure clean state before System OFF.
+	 */
+#define NRF52_PIN_CNF_SENSE_Msk 0x00030000U
+#define NRF52_WAKEUP_PIN_CNF    0x0003000cU  /* Input, pullup, SENSE Low (sw0 = Button 1) */
+	for (int i = 0; i < 32; i++) {
+		if (i != sw0.pin) {
+			NRF_P0->PIN_CNF[i] &= ~NRF52_PIN_CNF_SENSE_Msk;
+		}
+	}
+	for (int i = 0; i < 16; i++) {
+		NRF_P1->PIN_CNF[i] &= ~NRF52_PIN_CNF_SENSE_Msk;
+	}
+	NRF_P0->PIN_CNF[sw0.pin] = NRF52_WAKEUP_PIN_CNF;
+	NRF_P0->LATCH = 0xFFFFFFFFU;
+	NRF_P1->LATCH = 0xFFFFFFFFU;
+	NRF_P0->DETECTMODE = 0;
+	NRF_P1->DETECTMODE = 0;
+	k_busy_wait(50);
+#endif
 	sys_poweroff();
 }
 K_WORK_DEFINE(power_off_work, power_off_work_handler);
@@ -326,7 +369,7 @@ int main(void)
 	}
 
 #if defined(CONFIG_GPIO_WAKEUP_ENABLE)
-	/* Button 0 (sw0): configure as wake-up source for when we enter system off */
+	/* Button 1 (sw0): configure as wake-up source for when we enter system off */
 	rc = gpio_pin_configure_dt(&sw0, GPIO_INPUT);
 	if (rc < 0) {
 		printf("Could not configure sw0 GPIO (%d)\n", rc);
@@ -337,7 +380,7 @@ int main(void)
 		printf("Could not configure sw0 GPIO interrupt (%d)\n", rc);
 		return 0;
 	}
-	printf("Press sw0 to wake from system off\n");
+	printf("Press Button 1 (sw0) to wake from system off\n");
 #endif
 
 #if DT_NODE_EXISTS(DT_ALIAS(sw2))
@@ -350,9 +393,9 @@ int main(void)
 		rc = gpio_pin_interrupt_configure_dt(&sw2, GPIO_INT_EDGE_FALLING);
 	}
 	if (rc < 0) {
-		printf("Could not configure sw2 (button 2) (%d)\n", rc);
+		printf("Could not configure sw2 (button 3) (%d)\n", rc);
 	} else {
-		printf("Button 2 (sw2): Bluetooth activity\n");
+		printf("Button 3 (sw2): Bluetooth activity\n");
 	}
 #endif
 #if DT_NODE_EXISTS(DT_ALIAS(sw3))
@@ -365,9 +408,9 @@ int main(void)
 		rc = gpio_pin_interrupt_configure_dt(&sw3, GPIO_INT_EDGE_FALLING);
 	}
 	if (rc < 0) {
-		printf("Could not configure sw3 (button 3) (%d)\n", rc);
+		printf("Could not configure sw3 (button 4) (%d)\n", rc);
 	} else {
-		printf("Button 3 (sw3): Power off\n");
+		printf("Button 4 (sw3): Power off\n");
 	}
 #endif
 
