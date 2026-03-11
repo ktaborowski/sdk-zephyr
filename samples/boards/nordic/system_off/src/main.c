@@ -88,6 +88,40 @@ int print_reset_cause(uint32_t reset_cause)
 	return 0;
 }
 
+static int bluetooth_activity(void)
+{
+	int rc = 0;
+
+	rc = bt_enable(NULL);
+	if (rc) {
+		printf("Bluetooth init failed (%d)\n", rc);
+		return 0;
+	}
+	rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), NULL, 0);
+	if (rc) {
+		printf("Advertising failed to start (%d)\n", rc);
+		return 0;
+	}
+	printf("Bluetooth advertising started\n");
+
+	k_sleep(K_SECONDS(2));
+
+	rc = bt_le_adv_stop();
+	if (rc < 0) {
+		printf("Could not stop advertising (%d)\n", rc);
+		return 0;
+	}
+	printk("Bluetooth advertising stopped\n");
+	rc = bt_disable();
+	if (rc < 0) {
+		printf("Could not disable Bluetooth (%d)\n", rc);
+		return 0;
+	}
+	printk("Bluetooth disabled\n");
+
+	k_sleep(K_MSEC(500));
+}
+
 int main(void)
 {
 	int rc;
@@ -130,32 +164,11 @@ int main(void)
 		printf("Retained data not supported\n");
 	}
 
-	rc = bt_enable(NULL);
-	if (rc) {
-		printf("Bluetooth init failed (%d)\n", rc);
-		return 0;
-	}
-	rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), NULL, 0);
-	if (rc) {
-		printf("Advertising failed to start (%d)\n", rc);
-		return 0;
-	}
-	printf("Bluetooth advertising started\n");
-
-	k_sleep(K_SECONDS(3));
-
-	rc = bt_le_adv_stop();
+	rc = bluetooth_activity();
 	if (rc < 0) {
-		printf("Could not stop advertising (%d)\n", rc);
+		printf("Bluetooth failed (%d)\n", rc);
 		return 0;
 	}
-	printk("advertising stopped\n");
-	rc = bt_disable();
-	if (rc < 0) {
-		printf("Could not disable Bluetooth (%d)\n", rc);
-		return 0;
-	}
-	printk("Bluetooth disabled\n");
 
 #if defined(CONFIG_SYS_CLOCK_DISABLE)
 	printf("System clock will be disabled\n");
