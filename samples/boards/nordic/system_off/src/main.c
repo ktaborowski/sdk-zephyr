@@ -29,7 +29,13 @@
 
 void debug_print(void)
 {
-	// Show the contents of the RESETREAS register (reset reason flags, cumulative unless cleared by firmware)
+	NRF_P0->OUTSET = (1 << 13); // LED1 off
+
+	printk("VARIANT: 0x%08x\n", NRF_FICR->INFO.VARIANT);
+	printk("PART:    0x%08x\n", NRF_FICR->INFO.PART);
+
+	// Show the contents of the RESETREAS register (reset reason flags, cumulative unless
+	// cleared by firmware)
 	printk("RESETREAS: 0x%08x\n", NRF_POWER->RESETREAS);
 
 	// Show GPIO P0 and P1 LATCH registers (flags for detected pin events not yet acknowledged)
@@ -40,15 +46,25 @@ void debug_print(void)
 	printk("P0 DETECTMODE: 0x%08x\n", NRF_P0->DETECTMODE);
 	printk("P1 DETECTMODE: 0x%08x\n", NRF_P1->DETECTMODE);
 
-	// Show PIN_CNF register for button 1 (pin configuration, including SENSE field for wakeup)
-	uint8_t btn1_pin = 11; // nrf52840dk button 1 is P0.11
-	printk("Button1 PIN_CNF: 0x%08x\n", NRF_P0->PIN_CNF[btn1_pin]);
-	// SENSE field is bits [17:16]: 0=Disabled, 2=High, 3=Low
+	printk("Pins with SENSE enabled:\n");
+	for (int i = 0; i < 32; i++) {
+		uint32_t cnf = NRF_P0->PIN_CNF[i];
+		if (cnf & 0x00030000) {
+			printk("  P0.%02d PIN_CNF=0x%08x\n", i, cnf);
+		}
+	}
+	for (int i = 0; i < 16; i++) {
+		uint32_t cnf = NRF_P1->PIN_CNF[i];
+		if (cnf & 0x00030000) {
+			printk("  P1.%02d PIN_CNF=0x%08x\n", i, cnf);
+		}
+	}
 
 	// Show current state of inputs on port P0 (used to see status of detected pins)
 	printk("P0 IN: 0x%08x\n", NRF_P0->IN);
 
-	// Clear LATCH registers on both ports before entering System OFF (removes stale detect events)
+	// Clear LATCH registers on both ports before entering System OFF (removes stale detect
+	// events)
 	NRF_P0->LATCH = 0xFFFFFFFF;
 	NRF_P1->LATCH = 0xFFFFFFFF;
 	printk("LATCH cleared. P0: 0x%08x P1: 0x%08x\n", NRF_P0->LATCH, NRF_P1->LATCH);
@@ -59,12 +75,17 @@ void debug_print(void)
 	// Show radio state register (current state of radio peripheral)
 	printk("RADIO.STATE: 0x%08x\n", NRF_RADIO->STATE);
 
-	// Show enabled PPI channels (Programmable Peripheral Interconnect, used by BLE and peripherals)
+	// Show enabled PPI channels (Programmable Peripheral Interconnect, used by BLE and
+	// peripherals)
 	printk("PPI.CHEN: 0x%08x\n", NRF_PPI->CHEN);
 	printk("PPI.CHENSET: 0x%08x\n", NRF_PPI->CHENSET);
-	printk("PPI.CH[16].EEP: 0x%08x\n", NRF_PPI->CH[16].EEP);
-	printk("PPI.CH[16].TEP: 0x%08x\n", NRF_PPI->CH[16].TEP);
-	printk("PPI.FORK[16].TEP: 0x%08x\n", NRF_PPI->FORK[16].TEP);
+	/* Dump PPI channel connections */
+	for (int i = 0; i < 20; i++) {
+		if (NRF_PPI->CHEN & (1 << i)) {
+			printk("PPI CH%d: EEP=0x%08x TEP=0x%08x\n", i, NRF_PPI->CH[i].EEP,
+			       NRF_PPI->CH[i].TEP);
+		}
+	}
 
 	// Show EasyDMA peripheral modes (to check for activity on system timers)
 	printk("TIMER0.MODE: 0x%08x\n", NRF_TIMER0->MODE);
@@ -77,6 +98,12 @@ void debug_print(void)
 
 	// Show enabled RTC0 events (real-time counter)
 	printk("RTC0.EVTEN:  0x%08x\n", NRF_RTC0->EVTEN);
+	printk("RTC0.CC[0]:   0x%08x\n", NRF_RTC0->CC[0]);
+	printk("RTC0.COUNTER: 0x%08x\n", NRF_RTC0->COUNTER);
+
+	// Show RNG (Random Number Generator) value and interrupt enable register
+	printk("RNG.VALUE:    0x%08x\n", NRF_RNG->VALUE);
+	printk("RNG.INTEN:    0x%08x\n", NRF_RNG->INTENSET);
 }
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
@@ -349,3 +376,16 @@ int main(void)
 	}
 	return 0;
 }
+
+static int earliest_debug(void)
+{
+	NRF_P0->DIRSET = (1 << 13);
+	NRF_P0->OUTCLR = (1 << 13); // LED1 on
+
+	NRF_P0->DIRSET = (1 << 14);
+	NRF_P0->OUTSET = (1 << 14); // LED2 off
+
+	return 0;
+}
+
+SYS_INIT(earliest_debug, PRE_KERNEL_1, 0);
