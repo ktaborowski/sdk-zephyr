@@ -5,6 +5,7 @@
  */
 
 #include "retained.h"
+#include "zephyr/sys/printk.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -19,6 +20,10 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/drivers/timer/system_timer.h>
 
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/hci.h>
+
 #define NON_WAKEUP_RESET_REASON (RESET_PIN | RESET_SOFTWARE | RESET_POR | RESET_DEBUG)
 
 #if defined(CONFIG_GRTC_WAKEUP_ENABLE)
@@ -32,12 +37,39 @@ static const struct gpio_dt_spec sw0 = GPIO_DT_SPEC_GET(DT_ALIAS(sw0), gpios);
 static const struct device *comp_dev = DEVICE_DT_GET(DT_NODELABEL(comp));
 #endif
 
+static const struct bt_data ad[] = {
+	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
+};
+
+static void connected(struct bt_conn *conn, uint8_t conn_err)
+{
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	if (conn_err) {
+		printk("Connection failed, err 0x%02x %s\n", conn_err, bt_hci_err_to_str(conn_err));
+		return;
+	}
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+	printk("Connected %s\n", addr);
+}
+
+static void disconnected(struct bt_conn *conn, uint8_t reason)
+{
+	printk("Disconnected, reason 0x%02x %s\n", reason, bt_hci_err_to_str(reason));
+}
+
+BT_CONN_CB_DEFINE(connection_cb) = {
+	.connected = connected,
+	.disconnected = disconnected,
+};
+
 int print_reset_cause(uint32_t reset_cause)
 {
 	int32_t ret;
 	uint32_t supported;
 
-	ret = hwinfo_get_supported_reset_cause((uint32_t *) &supported);
+	ret = hwinfo_get_supported_reset_cause((uint32_t *)&supported);
 
 	if (ret || !(reset_cause & supported)) {
 		return -ENOTSUP;
@@ -49,7 +81,7 @@ int print_reset_cause(uint32_t reset_cause)
 		printf("Wakeup from System OFF by GRTC.\n");
 	} else if (reset_cause & RESET_LOW_POWER_WAKE) {
 		printf("Wakeup from System OFF by GPIO.\n");
-	} else  {
+	} else {
 		printf("Other wake up cause 0x%08X.\n", reset_cause);
 	}
 
@@ -97,6 +129,33 @@ int main(void)
 	} else {
 		printf("Retained data not supported\n");
 	}
+
+	rc = bt_enable(NULL);
+	if (rc) {
+		printf("Bluetooth init failed (%d)\n", rc);
+		return 0;
+	}
+	rc = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), NULL, 0);
+	if (rc) {
+		printf("Advertising failed to start (%d)\n", rc);
+		return 0;
+	}
+	printf("Bluetooth advertising started\n");
+
+	k_sleep(K_SECONDS(3));
+
+	rc = bt_le_adv_stop();
+	if (rc < 0) {
+		printf("Could not stop advertising (%d)\n", rc);
+		return 0;
+	}
+	printk("advertising stopped\n");
+	rc = bt_disable();
+	if (rc < 0) {
+		printf("Could not disable Bluetooth (%d)\n", rc);
+		return 0;
+	}
+	printk("Bluetooth disabled\n");
 
 #if defined(CONFIG_SYS_CLOCK_DISABLE)
 	printf("System clock will be disabled\n");
