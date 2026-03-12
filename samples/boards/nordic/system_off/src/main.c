@@ -201,6 +201,13 @@ static void power_off_work_handler(struct k_work *work)
 	NRF_P0->DETECTMODE = 0;
 	NRF_P1->DETECTMODE = 0;
 	k_busy_wait(50);
+	/* Ensure wake pin is released (high) before OFF to avoid entering with DETECT high. */
+	for (int i = 0; i < 100; i++) {
+		if ((NRF_P0->IN & (1U << sw0.pin)) != 0) {
+			break;
+		}
+		k_busy_wait(1000);
+	}
 #endif
 	sys_poweroff();
 }
